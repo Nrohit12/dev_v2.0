@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Recursive Checkbox Tree Debugger</title>
+
+  <!--
+  ╔════════════════════════════════════════════════════════════╗
+  ║  VISUAL OVERVIEW                                           ║
+  ║                                                            ║
+  ║  DATA (flat)                    TREE (nested)             ║
+  ║  ───────────                    ─────────────             ║
+  ║  id  label   parentId          [ ] Parent A               ║
+  ║  ───────────────────          ┌──[ ] Child A1             ║
+  ║  1   Parent A   null          └──[ ] Child A2             ║
+  ║  2   Child A1   1                  └──[ ] Grandchild A2-1 ║
+  ║  3   Child A2   1               [ ] Parent B              ║
+  ║  6   Grand A2-1 3                 └──[ ] Child B1         ║
+  ║  4   Parent B   null                                       ║
+  ║  5   Child B1   4                (checkboxes reflect       ║
+  ║                                     this tree data)        ║
+  ║                                                            ║
+  ║  CLICK FLOW (DEBUG)                                       ║
+  ║  ─────────────────                                        ║
+  ║   DOM change event                                        ║
+  ║    └─► toggleNode()                                       ║
+  ║        ├─► setCheckedDown()   (downwards)                 ║
+  ║        ├─► updateAncestors()  (upwards)                   ║
+  ║        └─► renderTree()                                   ║
+  ╚════════════════════════════════════════════════════════════╝
+  -->
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 24px;
+      line-height: 1.4;
+      background: #f5f5f7;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 22px;
+    }
+
+    .layout {
+      display: flex;
+      gap: 20px;
+      align-items: stretch;
+    }
+
+    .panel {
+      background: #ffffff;
+      border-radius: 8px;
+      box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.03),
+        0 12px 30px rgba(0, 0, 0, 0.06);
+      padding: 14px 16px;
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .panel-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #555;
+    }
+
+    .panel-section-title {
+      font-size: 12px;
+      font-weight: 600;
+      margin: 4px 0 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #777;
+    }
+
+    .diagram {
+      font-family: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 11px;
+      white-space: pre;
+      background: #0b1020;
+      color: #a5ffb3;
+      border-radius: 6px;
+      padding: 8px;
+      overflow-x: auto;
+      line-height: 1.25;
+    }
+
+    .legend {
+      font-size: 11px;
+      color: #666;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: #eef3ff;
+      color: #3344aa;
+      margin-right: 4px;
+    }
+
+    .badge.step1 { background: #e3f2fd; color: #16407b; }
+    .badge.step2 { background: #e8f5e9; color: #1b5e20; }
+    .badge.step3 { background: #fff8e1; color: #9c6b00; }
+
+    /* TREE VIEW */
+    #tree-container {
+      margin-top: 4px;
+      flex: 1;
+    }
+
+    ul.tree-list {
+      list-style: none;
+      margin: 0;
+      padding-left: 18px;
+      position: relative;
+    }
+
+    ul.tree-list::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 6px;
+      border-left: 1px dashed #ccc;
+    }
+
+    .tree-item {
+      position: relative;
+      margin: 2px 0;
+      padding-left: 10px;
+    }
+
+    .tree-item::before {
+      content: "";
+      position: absolute;
+      top: 11px;
+      left: 6px;
+      width: 8px;
+      border-bottom: 1px dashed #ccc;
+    }
+
+    .tree-item label {
+      cursor: pointer;
+      user-select: none;
+      font-size: 14px;
+    }
+
+    input[type="checkbox"] {
+      vertical-align: middle;
+    }
+
+    .caption {
+      font-size: 12px;
+      color: #777;
+      margin-top: 6px;
+    }
+
+    .caption ul {
+      padding-left: 20px;
+      margin: 4px 0 0;
+    }
+
+    /* DEBUGGER PANEL */
+    .debug-log {
+      font-family: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 11px;
+      background: #020617;
+      color: #e5e7eb;
+      border-radius: 6px;
+      padding: 6px 8px;
+      max-height: 280px;
+      overflow: auto;
+      border: 1px solid #111827;
+    }
+
+    .debug-session-label {
+      font-size: 11px;
+      color: #a7f3d0;
+      margin-bottom: 4px;
+    }
+
+    .log-entry {
+      border-top: 1px solid rgba(148, 163, 184, 0.3);
+      padding: 3px 0;
+    }
+
+    .log-entry:first-of-type {
+      border-top: none;
+    }
+
+    .log-header {
+      font-size: 11px;
+      color: #93c5fd;
+      margin-bottom: 2px;
+    }
+
+    .log-body {
+      margin: 0;
+      font-size: 11px;
+      white-space: pre;
+      color: #e5e7eb;
+    }
+
+    .clear-btn {
+      align-self: flex-end;
+      margin-top: 4px;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid #cbd5f5;
+      background: #eef2ff;
+      color: #1e293b;
+      cursor: pointer;
+    }
+
+    .clear-btn:hover {
+      background: #e0e7ff;
+    }
+  </style>
+</head>
+<body>
+  <h1>Recursive Checkbox Tree Debugger</h1>
+
+  <div class="layout">
+    <!-- LEFT: diagrams + debugger -->
+    <div class="panel">
+      <div class="panel-title">Structure &amp; Flow (Graphical)</div>
+
+      <div class="diagram">
+DATA (flat list):
+
+  id  label            parentId
+  ──────────────────────────────
+  1   "Parent A"       null
+  2   "Child A1"       1
+  3   "Child A2"       1
+  6   "Grandchild A2-1"3
+  4   "Parent B"       null
+  5   "Child B1"       4
+
+TREE (after buildTree):
+
+  roots = [
+    {
+      id: 1, label: "Parent A",
+      children: [
+        { id: 2, label: "Child A1", children: [] },
+        {
+          id: 3, label: "Child A2",
+          children: [
+            { id: 6, label: "Grandchild A2-1", children: [] }
+          ]
+        }
+      ]
+    },
+    {
+      id: 4, label: "Parent B",
+      children: [
+        { id: 5, label: "Child B1", children: [] }
+      ]
+    }
+  ]
+
+CLICK FLOW:
+
+  [checkbox click] DOM "change" event
+        │
+        └─► toggleNode(nodeId, checked)
+              ├─► setCheckedDown(node, checked)   (downwards)
+              ├─► updateAncestors(node)           (upwards)
+              └─► renderTree(treeRoots)           (redraw)
+      </div>
+
+      <div class="legend">
+        <span class="badge step1">STEP 1</span> Build nested tree structure from <code>config</code><br />
+        <span class="badge step2">STEP 2</span> Children → Parent auto-select / indeterminate<br />
+        <span class="badge step3">STEP 3</span> Parent → Children select / unselect all
+      </div>
+
+      <div class="panel-section-title">Debugger (Click-by-click)</div>
+      <div id="debug-log" class="debug-log"></div>
+      <button id="clear-log-btn" class="clear-btn">Clear log</button>
+    </div>
+
+    <!-- RIGHT: interactive tree -->
+    <div class="panel">
+      <div class="panel-title">Interactive Tree</div>
+      <div id="tree-container"></div>
+
+      <div class="caption">
+        Each click logs:
+        <ul>
+          <li>Which function ran.</li>
+          <li>What data it received.</li>
+          <li>What the tree looked like at that step.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ──────────────────────────────────────────────────────────
+    // STEP 0: FLAT CONFIG (INPUT)
+    // ──────────────────────────────────────────────────────────
+    const config = [
+      { id: 1, label: "Parent A", parentId: null },
+      { id: 2, label: "Child A1", parentId: 1 },
+      { id: 3, label: "Child A2", parentId: 1 },
+      { id: 6, label: "Grandchild A2-1", parentId: 3 },
+
+      { id: 4, label: "Parent B", parentId: null },
+      { id: 5, label: "Child B1", parentId: 4 }
+    ];
+
+    // ──────────────────────────────────────────────────────────
+    // DEBUG UTILITIES (SNAPSHOTS + LOGGING)
+    // ──────────────────────────────────────────────────────────
+    let debugStep = 1;
+    let debugSession = 0;
+
+    function snapshotNode(node) {
+      return {
+        id: node.id,
+        label: node.label,
+        checked: node.checked,
+        indeterminate: node.indeterminate,
+        children: node.children.map(snapshotNode)
+      };
+    }
+
+    function snapshotTree(roots) {
+      return roots.map(snapshotNode);
+    }
+
+    function startDebugSession(nodeId, label, newChecked) {
+      debugSession++;
+      debugStep = 1;
+
+      const log = document.getElementById("debug-log");
+      if (!log) return;
+
+      log.innerHTML = "";
+
+      const sessionHeader = document.createElement("div");
+      sessionHeader.className = "debug-session-label";
+      sessionHeader.textContent =
+        `Click #${debugSession}: node ${nodeId} ("${label}") → checked = ${newChecked}`;
+      log.appendChild(sessionHeader);
+    }
+
+    function debugLog(title, payload) {
+      if (!debugSession) return;      // only log inside a click session
+
+      const log = document.getElementById("debug-log");
+      if (!log) return;
+
+      const entry = document.createElement("div");
+      entry.className = "log-entry";
+
+      const header = document.createElement("div");
+      header.className = "log-header";
+      header.textContent = `${debugStep++}. ${title}`;
+      entry.appendChild(header);
+
+      if (payload !== undefined) {
+        const pre = document.createElement("pre");
+        pre.className = "log-body";
+
+        try {
+          pre.textContent =
+            typeof payload === "string"
+              ? payload
+              : JSON.stringify(payload, null, 2);
+        } catch (e) {
+          pre.textContent = String(payload);
+        }
+
+        entry.appendChild(pre);
+      }
+
+      log.appendChild(entry);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // STEP 1: BUILD TREE FROM FLAT CONFIG
+    // ──────────────────────────────────────────────────────────
+    function buildTree(items) {
+      const lookup = new Map();
+
+      // 1A) Build map id -> node with initial state
+      for (const item of items) {
+        lookup.set(item.id, {
+          ...item,
+          children: [],
+          checked: false,
+          indeterminate: false
+        });
+      }
+
+      const roots = [];
+
+      // 1B) Connect children to parents
+      for (const item of items) {
+        const node = lookup.get(item.id);
+
+        if (item.parentId == null) {
+          roots.push(node);
+        } else {
+          const parent = lookup.get(item.parentId);
+          parent.children.push(node);
+        }
+      }
+
+      return roots;
+    }
+
+    // Build parent map: childId -> parentNode
+    function buildParentMap(roots) {
+      const parentMap = new Map();
+
+      function dfs(node, parent = null) {
+        if (parent) {
+          parentMap.set(node.id, parent);
+        }
+        for (const child of node.children) {
+          dfs(child, node);
+        }
+      }
+
+      for (const root of roots) {
+        dfs(root, null);
+      }
+
+      return parentMap;
+    }
+
+    // Find node by id in the tree
+    function findNodeById(roots, id) {
+      const stack = [...roots];
+
+      while (stack.length) {
+        const node = stack.pop();
+        if (node.id === id) return node;
+        stack.push(...node.children);
+      }
+
+      return null;
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // STEP 3: PARENT → CHILDREN (DOWNWARDS)
+    // ──────────────────────────────────────────────────────────
+    function setCheckedDown(node, checked) {
+      node.checked = checked;
+      node.indeterminate = false;
+
+      debugLog(`setCheckedDown(nodeId=${node.id})`, snapshotNode(node));
+
+      for (const child of node.children) {
+        setCheckedDown(child, checked);
+      }
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // STEP 2: CHILDREN → PARENT (UPWARDS)
+    // ──────────────────────────────────────────────────────────
+    function updateAncestors(node, parentMap) {
+      const parent = parentMap.get(node.id);
+      if (!parent) {
+        debugLog("updateAncestors()", "Reached root (no parent) – stop.");
+        return;
+      }
+
+      const children = parent.children;
+
+      debugLog(`updateAncestors(from nodeId=${node.id})`, {
+        parentId: parent.id,
+        childrenBefore: children.map(snapshotNode)
+      });
+
+      const allChecked = children.every(
+        (c) => c.checked && !c.indeterminate
+      );
+      const noneChecked = children.every(
+        (c) => !c.checked && !c.indeterminate
+      );
+
+      if (allChecked) {
+        parent.checked = true;
+        parent.indeterminate = false;
+      } else if (noneChecked) {
+        parent.checked = false;
+        parent.indeterminate = false;
+      } else {
+        parent.checked = false;
+        parent.indeterminate = true;
+      }
+
+      debugLog(`parent ${parent.id} after update`, snapshotNode(parent));
+
+      updateAncestors(parent, parentMap);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // MAIN: WHEN A CHECKBOX IS TOGGLED
+    // ──────────────────────────────────────────────────────────
+    function toggleNode(roots, parentMap, nodeId, newChecked) {
+      const node = findNodeById(roots, nodeId);
+      if (!node) return;
+
+      debugLog("toggleNode()", {
+        nodeId,
+        newChecked,
+        treeBefore: snapshotTree(roots)
+      });
+
+      // Downwards
+      setCheckedDown(node, newChecked);
+
+      // Upwards
+      updateAncestors(node, parentMap);
+
+      // Redraw
+      renderTree(roots, parentMap);
+
+      debugLog("toggleNode() finished", {
+        treeAfter: snapshotTree(roots)
+      });
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // RENDER: TREE DATA ► DOM
+    // ──────────────────────────────────────────────────────────
+    function createNodeElement(node, roots, parentMap) {
+      const li = document.createElement("li");
+      li.className = "tree-item";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = node.checked;
+      checkbox.indeterminate = node.indeterminate;
+      checkbox.id = `node-${node.id}`;
+
+      checkbox.addEventListener("change", (e) => {
+        const newChecked = e.target.checked;
+
+        // Start a new debug session for this click
+        startDebugSession(node.id, node.label, newChecked);
+        debugLog("DOM change event", {
+          nodeId: node.id,
+          label: node.label,
+          newChecked
+        });
+
+        toggleNode(roots, parentMap, node.id, newChecked);
+      });
+
+      const label = document.createElement("label");
+      label.htmlFor = checkbox.id;
+      label.textContent = ` ${node.label}`;
+
+      li.appendChild(checkbox);
+      li.appendChild(label);
+
+      if (node.children.length > 0) {
+        const ul = document.createElement("ul");
+        ul.className = "tree-list";
+
+        for (const child of node.children) {
+          ul.appendChild(createNodeElement(child, roots, parentMap));
+        }
+
+        li.appendChild(ul);
+      }
+
+      return li;
+    }
+
+    function renderTree(roots, parentMap) {
+      debugLog("renderTree()", snapshotTree(roots));
+
+      const container = document.getElementById("tree-container");
+      container.innerHTML = "";
+
+      const ul = document.createElement("ul");
+      ul.className = "tree-list";
+
+      for (const root of roots) {
+        ul.appendChild(createNodeElement(root, roots, parentMap));
+      }
+
+      container.appendChild(ul);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // BOOTSTRAP
+    // ──────────────────────────────────────────────────────────
+    const treeRoots = buildTree(config);
+    const parentMap = buildParentMap(treeRoots);
+
+    renderTree(treeRoots, parentMap);
+
+    // Clear-log button
+    const clearButton = document.getElementById("clear-log-btn");
+    if (clearButton) {
+      clearButton.addEventListener("click", () => {
+        const log = document.getElementById("debug-log");
+        if (log) log.innerHTML = "";
+        debugSession = 0;
+        debugStep = 1;
+      });
+    }
+  </script>
+</body>
+</html>
