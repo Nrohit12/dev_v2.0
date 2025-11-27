@@ -1,0 +1,66 @@
+{
+  "title": "Depth-First Search (DFS)",
+  "description": "A fundamental graph and tree traversal algorithm that explores as far as possible along each branch before backtracking. It's one of the most important algorithms in computer science, used in a wide variety of applications.",
+  "demoDescription": "In the interactive demo, you'll see DFS in action as it builds parent-child relationships in a permission tree structure, demonstrating how the algorithm traverses hierarchical data structures.",
+  "characteristics": [
+    {
+      "title": "Deep Exploration",
+      "description": "Explores nodes by going deep before going wide, following one path to its end before backtracking",
+      "icon": "🔍"
+    },
+    {
+      "title": "Stack-Based",
+      "description": "Uses a stack (or recursion) to keep track of nodes to visit, making it memory efficient for deep trees",
+      "icon": "📚"
+    },
+    {
+      "title": "Time Complexity",
+      "description": "O(V + E) where V is vertices and E is edges - visits each node and edge exactly once",
+      "icon": "⏱️"
+    },
+    {
+      "title": "Space Complexity",
+      "description": "O(V) for the recursion stack or explicit stack - space needed is proportional to the depth of the tree",
+      "icon": "💾"
+    }
+  ],
+  "useCases": [
+    {
+      "title": "Tree/Graph Traversal",
+      "description": "Visiting all nodes in a tree or graph structure systematically",
+      "icon": "🌳"
+    },
+    {
+      "title": "Path Finding",
+      "description": "Finding paths between nodes in a graph, useful for navigation and routing",
+      "icon": "🗺️"
+    },
+    {
+      "title": "Cycle Detection",
+      "description": "Detecting cycles in graphs, essential for validating graph structures",
+      "icon": "🔄"
+    },
+    {
+      "title": "Topological Sorting",
+      "description": "Ordering nodes in a directed acyclic graph, used in dependency resolution",
+      "icon": "📊"
+    },
+    {
+      "title": "Tree Operations",
+      "description": "Building parent maps, finding ancestors, and validating tree structures",
+      "icon": "🔧"
+    },
+    {
+      "title": "Backtracking Algorithms",
+      "description": "Solving puzzles, generating permutations, and exploring solution spaces",
+      "icon": "🧩"
+    }
+  ],
+  "demo": {
+    "title": "Interactive DFS Demo",
+    "description": "Explore a real-world implementation of DFS in a role permissions tree debugger. Click through the interactive demo to see how DFS traverses tree structures and maintains parent-child relationships.",
+    "link": "algo/dfs.html",
+    "icon": "🚀"
+  }
+}
+

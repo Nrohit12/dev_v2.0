@@ -1,0 +1,20 @@
+{
+  "title": "Algorithm Visualizations",
+  "subtitle": "Interactive demonstrations of computer science algorithms",
+  "algorithms": [
+    {
+      "id": "dfs",
+      "name": "Depth-First Search",
+      "shortName": "DFS",
+      "description": "A fundamental graph and tree traversal algorithm that explores as far as possible along each branch before backtracking.",
+      "category": "Graph Algorithms",
+      "characteristics": [ "Deep Exploration", "Stack-Based", "Time Complexity", "Space Complexity" ],
+      "icon": "🔍",
+      "color": "#667eea",
+      "link": "algo/dfs.html",
+      "dataFile": "data/dfs-info.json",
+      "languages": "JavaScript · Python · C++"
+    }
+  ]
+}
+
