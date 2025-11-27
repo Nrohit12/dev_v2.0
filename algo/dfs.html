@@ -1,266 +1,439 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Role Permissions Tree Debugger</title>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Role Permissions Tree Debugger</title>
 
-  <!--
-  ╔════════════════════════════════════════════════════════════╗
-  ║  REAL-WORLD SCENARIO                                       ║
-  ║                                                            ║
-  ║  You are building an Admin Panel for a SaaS product.       ║
-  ║  An admin is editing the "Support Agent" role to decide    ║
-  ║  what this role is allowed to do.                          ║
-  ║                                                            ║
-  ║  PERMISSIONS (flat):                                       ║
-  ║    Customer Accounts                                       ║
-  ║      ├─ View Customer                                      ║
-  ║      ├─ Edit Customer                                      ║
-  ║      └─ Reset Password                                     ║
-  ║                                                            ║
-  ║    Orders                                                  ║
-  ║      ├─ View Orders                                        ║
-  ║      ├─ Refund Order                                       ║
-  ║      └─ Cancel Order                                       ║
-  ║                                                            ║
-  ║    Reports                                                 ║
-  ║      ├─ View Sales Report                                  ║
-  ║      └─ Export CSV                                         ║
-  ║                                                            ║
-  ║  BEHAVIOUR:                                                ║
-  ║    • If the admin checks "Customer Accounts",              ║
-  ║      all its child permissions are granted.                ║
-  ║    • If all children are checked, the parent auto-checks.  ║
-  ║    • If some children are checked, parent is indeterminate.║
-  ║                                                            ║
-  ║  This is exactly the same logic you use for file trees,    ║
-  ║  module toggles, feature flags, category selection, etc.   ║
-  ╚════════════════════════════════════════════════════════════╝
+    <!--
+  REAL-WORLD SCENARIO:
+    Admin panel role: "Support Agent"
+    Grant/revoke permissions using a hierarchical checkbox tree.
   -->
 
-  <style>
-    * {
-      box-sizing: border-box;
-    }
+    <style>
+      * {
+        box-sizing: border-box;
+      }
 
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      margin: 24px;
-      line-height: 1.4;
-      background: #f5f5f7;
-    }
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        margin: 24px;
+        line-height: 1.4;
+        background: #f5f5f7;
+      }
 
-    h1 {
-      margin: 0 0 4px;
-      font-size: 22px;
-    }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 22px;
+      }
 
-    .subtitle {
-      margin: 0 0 16px;
-      font-size: 13px;
-      color: #555;
-    }
+      .subtitle {
+        margin: 0 0 16px;
+        font-size: 13px;
+        color: #555;
+      }
 
-    .layout {
-      display: flex;
-      gap: 20px;
-      align-items: stretch;
-    }
+      .layout {
+        display: flex;
+        gap: 20px;
+        align-items: stretch;
+      }
 
-    .panel {
-      background: #ffffff;
-      border-radius: 8px;
-      box-shadow:
-        0 0 0 1px rgba(0, 0, 0, 0.03),
-        0 12px 30px rgba(0, 0, 0, 0.06);
-      padding: 14px 16px;
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
+      .panel {
+        background: #ffffff;
+        border-radius: 8px;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.03),
+          0 12px 30px rgba(0, 0, 0, 0.06);
+        padding: 14px 16px;
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
 
-    .panel-title {
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #555;
-    }
+      .panel-title {
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #555;
+      }
 
-    .panel-section-title {
-      font-size: 12px;
-      font-weight: 600;
-      margin: 4px 0 2px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #777;
-    }
+      .panel-section-title {
+        font-size: 12px;
+        font-weight: 600;
+        margin: 8px 0 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #777;
+      }
 
-    .diagram {
-      font-family: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: 11px;
-      white-space: pre;
-      background: #0b1020;
-      color: #a5ffb3;
-      border-radius: 6px;
-      padding: 8px;
-      overflow-x: auto;
-      line-height: 1.25;
-    }
+      .diagram {
+        font-family: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono",
+          "Courier New", monospace;
+        font-size: 11px;
+        white-space: pre;
+        background: #0b1020;
+        color: #a5ffb3;
+        border-radius: 6px;
+        padding: 8px;
+        overflow-x: auto;
+        line-height: 1.25;
+      }
 
-    .legend {
-      font-size: 11px;
-      color: #666;
-    }
+      .legend {
+        font-size: 11px;
+        color: #666;
+      }
 
-    .badge {
-      display: inline-block;
-      padding: 2px 6px;
-      border-radius: 999px;
-      font-size: 9px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      background: #eef3ff;
-      color: #3344aa;
-      margin-right: 4px;
-    }
+      .badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 999px;
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        background: #eef3ff;
+        color: #3344aa;
+        margin-right: 4px;
+      }
 
-    .badge.step1 { background: #e3f2fd; color: #16407b; }
-    .badge.step2 { background: #e8f5e9; color: #1b5e20; }
-    .badge.step3 { background: #fff8e1; color: #9c6b00; }
+      .badge.step1 {
+        background: #e3f2fd;
+        color: #16407b;
+      }
+      .badge.step2 {
+        background: #e8f5e9;
+        color: #1b5e20;
+      }
+      .badge.step3 {
+        background: #fff8e1;
+        color: #9c6b00;
+      }
 
-    /* TREE VIEW */
-    #tree-container {
-      margin-top: 4px;
-      flex: 1;
-    }
+      /* CODE SNIPPETS FOR PYTHON / C++ */
+      .code-snippet {
+        font-family: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono",
+          "Courier New", monospace;
+        font-size: 11px;
+        background: #020617;
+        color: #e5e7eb;
+        border-radius: 6px;
+        padding: 8px;
+        overflow-x: auto;
+        border: 1px solid #111827;
+        line-height: 1.35;
+      }
 
-    ul.tree-list {
-      list-style: none;
-      margin: 0;
-      padding-left: 18px;
-      position: relative;
-    }
+      /* TREE VIEW */
+      #tree-container {
+        margin-top: 4px;
+        flex: 1;
+      }
 
-    ul.tree-list::before {
-      content: "";
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      left: 6px;
-      border-left: 1px dashed #ccc;
-    }
+      ul.tree-list {
+        list-style: none;
+        margin: 0;
+        padding-left: 18px;
+        position: relative;
+      }
 
-    .tree-item {
-      position: relative;
-      margin: 2px 0;
-      padding-left: 10px;
-    }
+      ul.tree-list::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 6px;
+        border-left: 1px dashed #ccc;
+      }
 
-    .tree-item::before {
-      content: "";
-      position: absolute;
-      top: 11px;
-      left: 6px;
-      width: 8px;
-      border-bottom: 1px dashed #ccc;
-    }
+      .tree-item {
+        position: relative;
+        margin: 2px 0;
+        padding-left: 10px;
+      }
 
-    .tree-item label {
-      cursor: pointer;
-      user-select: none;
-      font-size: 14px;
-    }
+      .tree-item::before {
+        content: "";
+        position: absolute;
+        top: 11px;
+        left: 6px;
+        width: 8px;
+        border-bottom: 1px dashed #ccc;
+      }
 
-    input[type="checkbox"] {
-      vertical-align: middle;
-    }
+      .tree-item label {
+        cursor: pointer;
+        user-select: none;
+        font-size: 14px;
+      }
 
-    .caption {
-      font-size: 12px;
-      color: #777;
-      margin-top: 6px;
-    }
+      input[type="checkbox"] {
+        vertical-align: middle;
+      }
 
-    .caption ul {
-      padding-left: 20px;
-      margin: 4px 0 0;
-    }
+      .caption {
+        font-size: 12px;
+        color: #777;
+        margin-top: 6px;
+      }
 
-    /* DEBUGGER PANEL */
-    .debug-log {
-      font-family: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: 11px;
-      background: #020617;
-      color: #e5e7eb;
-      border-radius: 6px;
-      padding: 6px 8px;
-      max-height: 280px;
-      overflow: auto;
-      border: 1px solid #111827;
-    }
+      .caption ul {
+        padding-left: 20px;
+        margin: 4px 0 0;
+      }
 
-    .debug-session-label {
-      font-size: 11px;
-      color: #a7f3d0;
-      margin-bottom: 4px;
-    }
+      /* DEBUGGER PANEL */
+      .debug-log {
+        font-family: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono",
+          "Courier New", monospace;
+        font-size: 11px;
+        background: #020617;
+        color: #e5e7eb;
+        border-radius: 6px;
+        padding: 6px 8px;
+        max-height: 280px;
+        overflow: auto;
+        border: 1px solid #111827;
+      }
 
-    .log-entry {
-      border-top: 1px solid rgba(148, 163, 184, 0.3);
-      padding: 3px 0;
-    }
+      .debug-session-label {
+        font-size: 11px;
+        color: #a7f3d0;
+        margin-bottom: 4px;
+      }
 
-    .log-entry:first-of-type {
-      border-top: none;
-    }
+      .log-entry {
+        border-top: 1px solid rgba(148, 163, 184, 0.3);
+        padding: 3px 0;
+      }
 
-    .log-header {
-      font-size: 11px;
-      color: #93c5fd;
-      margin-bottom: 2px;
-    }
+      .log-entry:first-of-type {
+        border-top: none;
+      }
 
-    .log-body {
-      margin: 0;
-      font-size: 11px;
-      white-space: pre;
-      color: #e5e7eb;
-    }
+      .log-header {
+        font-size: 11px;
+        color: #93c5fd;
+        margin-bottom: 2px;
+      }
 
-    .clear-btn {
-      align-self: flex-end;
-      margin-top: 4px;
-      font-size: 11px;
-      padding: 3px 8px;
-      border-radius: 999px;
-      border: 1px solid #cbd5f5;
-      background: #eef2ff;
-      color: #1e293b;
-      cursor: pointer;
-    }
+      .log-body {
+        margin: 0;
+        font-size: 11px;
+        white-space: pre;
+        color: #e5e7eb;
+      }
 
-    .clear-btn:hover {
-      background: #e0e7ff;
-    }
-  </style>
-</head>
-<body>
-  <h1>Role Permissions Tree Debugger</h1>
-  <p class="subtitle">
-    Real-world example: granting permissions for the <strong>"Support Agent"</strong> role in an admin panel.
-  </p>
+      .clear-btn {
+        align-self: flex-end;
+        margin-top: 4px;
+        font-size: 11px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        border: 1px solid #cbd5f5;
+        background: #eef2ff;
+        color: #1e293b;
+        cursor: pointer;
+      }
 
-  <div class="layout">
-    <!-- LEFT: diagrams + debugger -->
-    <div class="panel">
-      <div class="panel-title">Scenario &amp; Flow</div>
+      .clear-btn:hover {
+        background: #e0e7ff;
+      }
 
-      <div class="diagram">
-REAL-WORLD PROBLEM: Role Permissions
+      /* TABS */
+      .tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+        border-bottom: 2px solid #e2e8f0;
+      }
+
+      .tab {
+        padding: 8px 16px;
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid transparent;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        color: #718096;
+        transition: all 0.2s;
+        margin-bottom: -2px;
+      }
+
+      .tab:hover {
+        color: #4a5568;
+      }
+
+      .tab.active {
+        color: #667eea;
+        border-bottom-color: #667eea;
+        font-weight: 600;
+      }
+
+      .tab-content {
+        display: none;
+      }
+
+      .tab-content.active {
+        display: block;
+      }
+
+      /* REAL WORLD CONTEXT */
+      .real-world-context {
+        background: #f0f9ff;
+        border-left: 4px solid #0ea5e9;
+        padding: 16px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+      }
+
+      .real-world-context h3 {
+        margin: 0 0 8px 0;
+        font-size: 16px;
+        color: #0c4a6e;
+        font-weight: 600;
+      }
+
+      .real-world-context p {
+        margin: 0;
+        font-size: 14px;
+        color: #075985;
+        line-height: 1.6;
+      }
+
+      /* STEPS */
+      .steps-container {
+        margin-top: 16px;
+      }
+
+      .step-item {
+        background: #f7fafc;
+        border-left: 3px solid #667eea;
+        padding: 12px 16px;
+        margin-bottom: 12px;
+        border-radius: 4px;
+        transition: all 0.2s;
+      }
+
+      .step-item:hover {
+        background: #edf2f7;
+        transform: translateX(4px);
+      }
+
+      .step-number {
+        display: inline-block;
+        background: #667eea;
+        color: white;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        text-align: center;
+        line-height: 24px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-right: 12px;
+        vertical-align: middle;
+      }
+
+      .step-title {
+        font-weight: 600;
+        color: #2d3748;
+        font-size: 14px;
+        margin-bottom: 4px;
+      }
+
+      .step-description {
+        font-size: 13px;
+        color: #4a5568;
+        margin-left: 36px;
+      }
+
+      /* CODE TOGGLE */
+      .code-toggle {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .code-toggle-btn {
+        padding: 6px 12px;
+        background: #f7fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        color: #4a5568;
+        transition: all 0.2s;
+      }
+
+      .code-toggle-btn:hover {
+        background: #edf2f7;
+      }
+
+      .code-toggle-btn.active {
+        background: #667eea;
+        color: white;
+        border-color: #667eea;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Depth-First Search (DFS) - Role Permissions Tree</h1>
+    <p class="subtitle">
+      Interactive visualization of DFS in a real-world admin panel scenario.
+    </p>
+
+     <div class="layout">
+       <!-- LEFT: Interactive tree -->
+       <div class="panel">
+         <div class="panel-title">Role Permissions: "Support Agent"</div>
+         
+         <div class="caption">
+           <strong>Try it:</strong>
+           <ul>
+             <li>
+               Check <strong>Customer Accounts</strong> → all child permissions
+               are granted.
+             </li>
+             <li>
+               Check only <strong>View Orders</strong> →
+               <strong>Orders</strong> group becomes partially selected.
+             </li>
+             <li>Checking all children makes the parent fully checked again.</li>
+           </ul>
+         </div>
+
+         <div id="tree-container"></div>
+
+         <div class="panel-section-title" style="margin-top: 16px;">Debugger (Click-by-click)</div>
+         <div id="debug-log" class="debug-log"></div>
+         <button id="clear-log-btn" class="clear-btn">Clear log</button>
+       </div>
+
+      <!-- RIGHT: Real world context, scenario, steps -->
+      <div class="panel">
+        <!-- Real World Context -->
+        <div class="real-world-context">
+          <h3>🌐 Real-World Problem</h3>
+          <p>
+            You're building an <strong>Admin Panel</strong> for a SaaS product.
+            An admin is editing the <strong>"Support Agent"</strong> role to
+            decide what permissions this role is allowed to have. The
+            permissions are organized in a hierarchical tree structure where
+            checking a parent automatically grants all child permissions, and
+            checking all children makes the parent auto-check.
+          </p>
+        </div>
+
+        <div class="panel-title">Scenario &amp; Flow</div>
+
+        <div class="diagram">REAL-WORLD PROBLEM: Role Permissions
 
   Role: "Support Agent"
   What is this role allowed to do?
@@ -296,365 +469,484 @@ CLICK FLOW:
         └─► toggleNode(nodeId, checked)
               ├─► setCheckedDown(node, checked)   (parent → children)
               ├─► updateAncestors(node)           (children → parent)
-              └─► renderTree(treeRoots)           (redraw)
-      </div>
+              └─► renderTree(treeRoots)           (redraw)</div>
 
-      <div class="legend">
-        <span class="badge step1">STEP 1</span> Build nested permission tree from flat <code>config</code><br />
-        <span class="badge step2">STEP 2</span> Children → Parent auto-select / indeterminate<br />
-        <span class="badge step3">STEP 3</span> Parent → Children select / unselect all
+        <!-- Steps -->
+        <div class="steps-container">
+          <div class="step-item">
+            <span class="step-number">1</span>
+            <div class="step-title">Build Tree from Flat Config</div>
+            <div class="step-description">
+              Convert flat permission list into hierarchical tree structure
+              using DFS to establish parent-child relationships.
+            </div>
+          </div>
+          <div class="step-item">
+            <span class="step-number">2</span>
+            <div class="step-title">Children → Parent (Upward Propagation)</div>
+            <div class="step-description">
+              When a child is checked/unchecked, update parent state: all
+              checked = parent checked, some checked = indeterminate, none
+              checked = parent unchecked.
+            </div>
+          </div>
+          <div class="step-item">
+            <span class="step-number">3</span>
+            <div class="step-title">
+              Parent → Children (Downward Propagation)
+            </div>
+            <div class="step-description">
+              When a parent is checked/unchecked, recursively apply the same
+              state to all descendant nodes using DFS traversal.
+            </div>
+          </div>
+        </div>
       </div>
-
-      <div class="panel-section-title">Debugger (Click-by-click)</div>
-      <div id="debug-log" class="debug-log"></div>
-      <button id="clear-log-btn" class="clear-btn">Clear log</button>
     </div>
 
-    <!-- RIGHT: interactive tree -->
-    <div class="panel">
-      <div class="panel-title">Role Permissions: "Support Agent"</div>
-      <div id="tree-container"></div>
+     <!-- SECOND SECTION: Code Snippet -->
+     <div class="layout" style="margin-top: 20px">
+       <div class="panel" style="flex: 1">
+         <div class="panel-title">Code Snippet</div>
+         
+         <div class="code-toggle">
+           <button class="code-toggle-btn active" data-lang="python">
+             Python
+           </button>
+           <button class="code-toggle-btn" data-lang="cpp">C++</button>
+         </div>
 
-      <div class="caption">
-        This is what an admin would see in a real app:
-        <ul>
-          <li>Check <strong>Customer Accounts</strong> → all child permissions are granted.</li>
-          <li>Check only <strong>View Orders</strong> → <strong>Orders</strong> group becomes partially selected.</li>
-          <li>Checking all children makes the parent fully checked again.</li>
-        </ul>
-      </div>
-    </div>
-  </div>
+         <!-- Python Code -->
+         <div id="code-python" class="code-snippet-container">
+           <pre
+             class="code-snippet"
+           ><code># Python: core tree checkbox logic (no UI)
 
-  <script>
-    // ──────────────────────────────────────────────────────────
-    // STEP 0: FLAT CONFIG (REAL-WORLD PERMISSIONS)
-    // ──────────────────────────────────────────────────────────
-    // Imagine this coming from the database as "permissions"
-    // that you can assign to a role.
-    //
-    // parentId = null   → top-level permission category
-    // parentId = X      → child of permission with id X
-    //
-    const config = [
-      // Customer Accounts
-      { id: 1, label: "Customer Accounts", parentId: null },
-      { id: 2, label: "View Customer",     parentId: 1 },
-      { id: 3, label: "Edit Customer",     parentId: 1 },
-      { id: 4, label: "Reset Password",    parentId: 1 },
+class Node:
+    def __init__(self, id, label):
+        self.id = id
+        self.label = label
+        self.children = []
+        self.checked = False
+        self.indeterminate = False
 
-      // Orders
-      { id: 5, label: "Orders",            parentId: null },
-      { id: 6, label: "View Orders",       parentId: 5 },
-      { id: 7, label: "Refund Order",      parentId: 5 },
-      { id: 8, label: "Cancel Order",      parentId: 5 },
 
-      // Reports
-      { id: 9,  label: "Reports",          parentId: null },
-      { id: 10, label: "View Sales Report",parentId: 9 },
-      { id: 11, label: "Export CSV",       parentId: 9 }
-    ];
+def set_checked_down(node, checked: bool) -&gt; None:
+    """Parent → children: apply state to all descendants."""
+    node.checked = checked
+    node.indeterminate = False
+    for child in node.children:
+        set_checked_down(child, checked)
 
-    // ──────────────────────────────────────────────────────────
-    // DEBUG UTILITIES (SNAPSHOTS + LOGGING IN UI)
-    // ──────────────────────────────────────────────────────────
-    let debugStep = 1;
-    let debugSession = 0;
 
-    function snapshotNode(node) {
-      return {
-        id: node.id,
-        label: node.label,
-        checked: node.checked,
-        indeterminate: node.indeterminate,
-        children: node.children.map(snapshotNode)
-      };
-    }
+def update_ancestors(node, parent_map: dict) -&gt; None:
+    """Children → parent: recompute parent state."""
+    parent = parent_map.get(node.id)
+    if not parent:
+        return
 
-    function snapshotTree(roots) {
-      return roots.map(snapshotNode);
-    }
+    children = parent.children
+    all_checked = all(c.checked and not c.indeterminate for c in children)
+    none_checked = all((not c.checked) and not c.indeterminate for c in children)
 
-    function startDebugSession(nodeId, label, newChecked) {
-      debugSession++;
-      debugStep = 1;
+    if all_checked:
+        parent.checked = True
+        parent.indeterminate = False
+    elif none_checked:
+        parent.checked = False
+        parent.indeterminate = False
+    else:
+        parent.checked = False
+        parent.indeterminate = True
 
-      const log = document.getElementById("debug-log");
-      if (!log) return;
+      update_ancestors(parent, parent_map)</code></pre>
+         </div>
 
-      log.innerHTML = "";
+         <!-- C++ Code -->
+         <div
+           id="code-cpp"
+           class="code-snippet-container"
+           style="display: none"
+         >
+           <pre
+             class="code-snippet"
+           ><code>// C++: core tree checkbox logic (no UI)
 
-      const sessionHeader = document.createElement("div");
-      sessionHeader.className = "debug-session-label";
-      sessionHeader.textContent =
-        `Click #${debugSession}: "${label}" (id=${nodeId}) → checked = ${newChecked}`;
-      log.appendChild(sessionHeader);
-    }
+#include &lt;vector&gt;
+#include &lt;string&gt;
+#include &lt;unordered_map&gt;
 
-    function debugLog(title, payload) {
-      if (!debugSession) return;
+struct Node {
+    int id;
+    std::string label;
+    std::vector&lt;Node*&gt; children;
+    bool checked = false;
+    bool indeterminate = false;
+};
 
-      const log = document.getElementById("debug-log");
-      if (!log) return;
+void setCheckedDown(Node* node, bool checked) {
+    if (!node) return;
 
-      const entry = document.createElement("div");
-      entry.className = "log-entry";
+    // Parent → children: apply state to all descendants.
+    node-&gt;checked = checked;
+    node-&gt;indeterminate = false;
 
-      const header = document.createElement("div");
-      header.className = "log-header";
-      header.textContent = `${debugStep++}. ${title}`;
-      entry.appendChild(header);
-
-      if (payload !== undefined) {
-        const pre = document.createElement("pre");
-        pre.className = "log-body";
-        try {
-          pre.textContent =
-            typeof payload === "string"
-              ? payload
-              : JSON.stringify(payload, null, 2);
-        } catch (e) {
-          pre.textContent = String(payload);
-        }
-        entry.appendChild(pre);
-      }
-
-      log.appendChild(entry);
-      log.scrollTop = log.scrollHeight;
-    }
-
-    // ──────────────────────────────────────────────────────────
-    // STEP 1: BUILD TREE FROM FLAT CONFIG
-    // ──────────────────────────────────────────────────────────
-    function buildTree(items) {
-      const lookup = new Map();
-
-      // Create node objects with checkbox state
-      for (const item of items) {
-        lookup.set(item.id, {
-          ...item,
-          children: [],
-          checked: false,
-          indeterminate: false
-        });
-      }
-
-      const roots = [];
-
-      // Hook children to parents
-      for (const item of items) {
-        const node = lookup.get(item.id);
-
-        if (item.parentId == null) {
-          roots.push(node);
-        } else {
-          const parent = lookup.get(item.parentId);
-          parent.children.push(node);
-        }
-      }
-
-      return roots;
-    }
-
-    // Build parent map: childId -> parentNode
-    function buildParentMap(roots) {
-      const parentMap = new Map();
-
-      function dfs(node, parent = null) {
-        if (parent) {
-          parentMap.set(node.id, parent);
-        }
-        for (const child of node.children) {
-          dfs(child, node);
-        }
-      }
-
-      for (const root of roots) {
-        dfs(root, null);
-      }
-
-      return parentMap;
-    }
-
-    // Find node by id in tree
-    function findNodeById(roots, id) {
-      const stack = [...roots];
-
-      while (stack.length) {
-        const node = stack.pop();
-        if (node.id === id) return node;
-        stack.push(...node.children);
-      }
-
-      return null;
-    }
-
-    // ──────────────────────────────────────────────────────────
-    // STEP 3: PARENT → CHILDREN (DOWNWARDS)
-    // ──────────────────────────────────────────────────────────
-    function setCheckedDown(node, checked) {
-      node.checked = checked;
-      node.indeterminate = false;
-
-      debugLog(`setCheckedDown(nodeId=${node.id})`, snapshotNode(node));
-
-      for (const child of node.children) {
+    for (Node* child : node-&gt;children) {
         setCheckedDown(child, checked);
-      }
+    }
+}
+
+void updateAncestors(Node* node,
+                     std::unordered_map&lt;int, Node*&gt;&amp; parentMap) {
+    auto it = parentMap.find(node-&gt;id);
+    if (it == parentMap.end()) return;
+
+    Node* parent = it-&gt;second;
+    const auto&amp; children = parent-&gt;children;
+
+    bool allChecked = true;
+    bool noneChecked = true;
+
+    for (Node* c : children) {
+        bool fullyChecked   = c-&gt;checked &amp;&amp; !c-&gt;indeterminate;
+        bool fullyUnchecked = !c-&gt;checked &amp;&amp; !c-&gt;indeterminate;
+
+        allChecked = allChecked &amp;&amp; fullyChecked;
+        noneChecked = noneChecked &amp;&amp; fullyUnchecked;
     }
 
-    // ──────────────────────────────────────────────────────────
-    // STEP 2: CHILDREN → PARENT (UPWARDS)
-    // ──────────────────────────────────────────────────────────
-    function updateAncestors(node, parentMap) {
-      const parent = parentMap.get(node.id);
-      if (!parent) {
-        debugLog("updateAncestors()", "Reached top-level permission – stop.");
-        return;
-      }
-
-      const children = parent.children;
-
-      debugLog(`updateAncestors(from nodeId=${node.id})`, {
-        parentId: parent.id,
-        parentLabel: parent.label,
-        childrenBefore: children.map(snapshotNode)
-      });
-
-      const allChecked = children.every(
-        (c) => c.checked && !c.indeterminate
-      );
-      const noneChecked = children.every(
-        (c) => !c.checked && !c.indeterminate
-      );
-
-      if (allChecked) {
-        parent.checked = true;
-        parent.indeterminate = false;
-      } else if (noneChecked) {
-        parent.checked = false;
-        parent.indeterminate = false;
-      } else {
-        parent.checked = false;
-        parent.indeterminate = true;
-      }
-
-      debugLog(`parent ${parent.id} ("${parent.label}") after update`, snapshotNode(parent));
+    if (allChecked) {
+        parent-&gt;checked = true;
+        parent-&gt;indeterminate = false;
+    } else if (noneChecked) {
+        parent-&gt;checked = false;
+        parent-&gt;indeterminate = false;
+    } else {
+        parent-&gt;checked = false;
+        parent-&gt;indeterminate = true;
+    }
 
       updateAncestors(parent, parentMap);
-    }
+  }</code></pre>
+         </div>
+       </div>
+     </div>
 
-    // ──────────────────────────────────────────────────────────
-    // MAIN: WHEN A CHECKBOX IS TOGGLED
-    // ──────────────────────────────────────────────────────────
-    function toggleNode(roots, parentMap, nodeId, newChecked) {
-      const node = findNodeById(roots, nodeId);
-      if (!node) return;
+    <script>
+      // STEP 0: FLAT CONFIG (REAL-WORLD PERMISSIONS)
+      const config = [
+        // Customer Accounts
+        { id: 1, label: "Customer Accounts", parentId: null },
+        { id: 2, label: "View Customer", parentId: 1 },
+        { id: 3, label: "Edit Customer", parentId: 1 },
+        { id: 4, label: "Reset Password", parentId: 1 },
 
-      debugLog("toggleNode()", {
-        nodeId,
-        label: node.label,
-        newChecked,
-        treeBefore: snapshotTree(roots)
-      });
+        // Orders
+        { id: 5, label: "Orders", parentId: null },
+        { id: 6, label: "View Orders", parentId: 5 },
+        { id: 7, label: "Refund Order", parentId: 5 },
+        { id: 12, label: "Approve Refund", parentId: 7 },
+        { id: 8, label: "Cancel Order", parentId: 5 },
 
-      // Parent → children
-      setCheckedDown(node, newChecked);
+        // Reports
+        { id: 9, label: "Reports", parentId: null },
+        { id: 10, label: "View Sales Report", parentId: 9 },
+        { id: 11, label: "Export CSV", parentId: 9 },
+      ];
 
-      // Children → parent
-      updateAncestors(node, parentMap);
+      // DEBUG UTILITIES
+      let debugStep = 1;
+      let debugSession = 0;
 
-      // Redraw UI
-      renderTree(roots, parentMap);
-
-      debugLog("toggleNode() finished", {
-        treeAfter: snapshotTree(roots)
-      });
-    }
-
-    // ──────────────────────────────────────────────────────────
-    // RENDER: TREE DATA ► DOM
-    // ──────────────────────────────────────────────────────────
-    function createNodeElement(node, roots, parentMap) {
-      const li = document.createElement("li");
-      li.className = "tree-item";
-
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.checked = node.checked;
-      checkbox.indeterminate = node.indeterminate;
-      checkbox.id = `node-${node.id}`;
-
-      checkbox.addEventListener("change", (e) => {
-        const newChecked = e.target.checked;
-
-        // Start a new debugger session for this click
-        startDebugSession(node.id, node.label, newChecked);
-        debugLog("DOM change event", {
-          nodeId: node.id,
+      function snapshotNode(node) {
+        return {
+          id: node.id,
           label: node.label,
-          newChecked
+          checked: node.checked,
+          indeterminate: node.indeterminate,
+          children: node.children.map(snapshotNode),
+        };
+      }
+
+      function snapshotTree(roots) {
+        return roots.map(snapshotNode);
+      }
+
+      function startDebugSession(nodeId, label, newChecked) {
+        debugSession++;
+        debugStep = 1;
+
+        const log = document.getElementById("debug-log");
+        if (!log) return;
+
+        log.innerHTML = "";
+
+        const sessionHeader = document.createElement("div");
+        sessionHeader.className = "debug-session-label";
+        sessionHeader.textContent = `Click #${debugSession}: "${label}" (id=${nodeId}) → checked = ${newChecked}`;
+        log.appendChild(sessionHeader);
+      }
+
+      function debugLog(title, payload) {
+        if (!debugSession) return;
+
+        const log = document.getElementById("debug-log");
+        if (!log) return;
+
+        const entry = document.createElement("div");
+        entry.className = "log-entry";
+
+        const header = document.createElement("div");
+        header.className = "log-header";
+        header.textContent = `${debugStep++}. ${title}`;
+        entry.appendChild(header);
+
+        if (payload !== undefined) {
+          const pre = document.createElement("pre");
+          pre.className = "log-body";
+          try {
+            pre.textContent =
+              typeof payload === "string"
+                ? payload
+                : JSON.stringify(payload, null, 2);
+          } catch (e) {
+            pre.textContent = String(payload);
+          }
+          entry.appendChild(pre);
+        }
+
+        log.appendChild(entry);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      // STEP 1: BUILD TREE FROM FLAT CONFIG
+      function buildTree(items) {
+        const lookup = new Map();
+
+        for (const item of items) {
+          lookup.set(item.id, {
+            ...item,
+            children: [],
+            checked: false,
+            indeterminate: false,
+          });
+        }
+
+        const roots = [];
+
+        for (const item of items) {
+          const node = lookup.get(item.id);
+
+          if (item.parentId == null) {
+            roots.push(node);
+          } else {
+            const parent = lookup.get(item.parentId);
+            parent.children.push(node);
+          }
+        }
+
+        return roots;
+      }
+
+      function buildParentMap(roots) {
+        const parentMap = new Map();
+
+        function dfs(node, parent = null) {
+          if (parent) {
+            parentMap.set(node.id, parent);
+          }
+          for (const child of node.children) {
+            dfs(child, node);
+          }
+        }
+
+        for (const root of roots) {
+          dfs(root, null);
+        }
+
+        return parentMap;
+      }
+
+      function findNodeById(roots, id) {
+        const stack = [...roots];
+
+        while (stack.length) {
+          const node = stack.pop();
+          if (node.id === id) return node;
+          stack.push(...node.children);
+        }
+
+        return null;
+      }
+
+      // STEP 3: PARENT → CHILDREN
+      function setCheckedDown(node, checked) {
+        node.checked = checked;
+        node.indeterminate = false;
+
+        debugLog(`setCheckedDown(nodeId=${node.id})`, snapshotNode(node));
+
+        for (const child of node.children) {
+          setCheckedDown(child, checked);
+        }
+      }
+
+      // STEP 2: CHILDREN → PARENT
+      function updateAncestors(node, parentMap) {
+        const parent = parentMap.get(node.id);
+        if (!parent) {
+          debugLog("updateAncestors()", "Reached top-level permission – stop.");
+          return;
+        }
+
+        const children = parent.children;
+
+        debugLog(`updateAncestors(from nodeId=${node.id})`, {
+          parentId: parent.id,
+          parentLabel: parent.label,
+          childrenBefore: children.map(snapshotNode),
         });
 
-        toggleNode(roots, parentMap, node.id, newChecked);
-      });
+        const allChecked = children.every((c) => c.checked && !c.indeterminate);
+        const noneChecked = children.every(
+          (c) => !c.checked && !c.indeterminate
+        );
 
-      const label = document.createElement("label");
-      label.htmlFor = checkbox.id;
-      label.textContent = ` ${node.label}`;
+        if (allChecked) {
+          parent.checked = true;
+          parent.indeterminate = false;
+        } else if (noneChecked) {
+          parent.checked = false;
+          parent.indeterminate = false;
+        } else {
+          parent.checked = false;
+          parent.indeterminate = true;
+        }
 
-      li.appendChild(checkbox);
-      li.appendChild(label);
+        debugLog(
+          `parent ${parent.id} ("${parent.label}") after update`,
+          snapshotNode(parent)
+        );
 
-      // Recursively render children
-      if (node.children.length > 0) {
+        updateAncestors(parent, parentMap);
+      }
+
+      // MAIN: WHEN A CHECKBOX IS TOGGLED
+      function toggleNode(roots, parentMap, nodeId, newChecked) {
+        const node = findNodeById(roots, nodeId);
+        if (!node) return;
+
+        debugLog("toggleNode()", {
+          nodeId,
+          label: node.label,
+          newChecked,
+          treeBefore: snapshotTree(roots),
+        });
+
+        setCheckedDown(node, newChecked);
+        updateAncestors(node, parentMap);
+        renderTree(roots, parentMap);
+
+        debugLog("toggleNode() finished", {
+          treeAfter: snapshotTree(roots),
+        });
+      }
+
+      // RENDER: TREE DATA → DOM
+      function createNodeElement(node, roots, parentMap) {
+        const li = document.createElement("li");
+        li.className = "tree-item";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = node.checked;
+        checkbox.indeterminate = node.indeterminate;
+        checkbox.id = `node-${node.id}`;
+
+        checkbox.addEventListener("change", (e) => {
+          const newChecked = e.target.checked;
+
+          startDebugSession(node.id, node.label, newChecked);
+          debugLog("DOM change event", {
+            nodeId: node.id,
+            label: node.label,
+            newChecked,
+          });
+
+          toggleNode(roots, parentMap, node.id, newChecked);
+        });
+
+        const label = document.createElement("label");
+        label.htmlFor = checkbox.id;
+        label.textContent = ` ${node.label}`;
+
+        li.appendChild(checkbox);
+        li.appendChild(label);
+
+        if (node.children.length > 0) {
+          const ul = document.createElement("ul");
+          ul.className = "tree-list";
+
+          for (const child of node.children) {
+            ul.appendChild(createNodeElement(child, roots, parentMap));
+          }
+
+          li.appendChild(ul);
+        }
+
+        return li;
+      }
+
+      function renderTree(roots, parentMap) {
+        debugLog("renderTree()", snapshotTree(roots));
+
+        const container = document.getElementById("tree-container");
+        container.innerHTML = "";
+
         const ul = document.createElement("ul");
         ul.className = "tree-list";
 
-        for (const child of node.children) {
-          ul.appendChild(createNodeElement(child, roots, parentMap));
+        for (const root of roots) {
+          ul.appendChild(createNodeElement(root, roots, parentMap));
         }
 
-        li.appendChild(ul);
+        container.appendChild(ul);
       }
 
-      return li;
-    }
+      // BOOTSTRAP
+      const treeRoots = buildTree(config);
+      const parentMap = buildParentMap(treeRoots);
 
-    function renderTree(roots, parentMap) {
-      debugLog("renderTree()", snapshotTree(roots));
+      renderTree(treeRoots, parentMap);
 
-      const container = document.getElementById("tree-container");
-      container.innerHTML = "";
-
-      const ul = document.createElement("ul");
-      ul.className = "tree-list";
-
-      for (const root of roots) {
-        ul.appendChild(createNodeElement(root, roots, parentMap));
+      const clearButton = document.getElementById("clear-log-btn");
+      if (clearButton) {
+        clearButton.addEventListener("click", () => {
+          const log = document.getElementById("debug-log");
+          if (log) log.innerHTML = "";
+          debugSession = 0;
+          debugStep = 1;
+        });
       }
 
-      container.appendChild(ul);
-    }
+       // CODE LANGUAGE TOGGLE
+      const codeToggleBtns = document.querySelectorAll(".code-toggle-btn");
+      codeToggleBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const lang = btn.getAttribute("data-lang");
 
-    // ──────────────────────────────────────────────────────────
-    // BOOTSTRAP
-    // ──────────────────────────────────────────────────────────
-    const treeRoots = buildTree(config);
-    const parentMap = buildParentMap(treeRoots);
+          // Remove active from all buttons
+          codeToggleBtns.forEach((b) => b.classList.remove("active"));
+          // Hide all code containers
+          document
+            .querySelectorAll(".code-snippet-container")
+            .forEach((c) => (c.style.display = "none"));
 
-    renderTree(treeRoots, parentMap);
-
-    // Clear-log button
-    const clearButton = document.getElementById("clear-log-btn");
-    if (clearButton) {
-      clearButton.addEventListener("click", () => {
-        const log = document.getElementById("debug-log");
-        if (log) log.innerHTML = "";
-        debugSession = 0;
-        debugStep = 1;
+          // Add active to clicked button and show corresponding code
+          btn.classList.add("active");
+          document.getElementById(`code-${lang}`).style.display = "block";
+        });
       });
-    }
-  </script>
-</body>
+    </script>
+  </body>
 </html>
