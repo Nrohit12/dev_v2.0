@@ -2,31 +2,39 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Recursive Checkbox Tree Debugger</title>
+  <title>Role Permissions Tree Debugger</title>
 
   <!--
   ╔════════════════════════════════════════════════════════════╗
-  ║  VISUAL OVERVIEW                                           ║
+  ║  REAL-WORLD SCENARIO                                       ║
   ║                                                            ║
-  ║  DATA (flat)                    TREE (nested)             ║
-  ║  ───────────                    ─────────────             ║
-  ║  id  label   parentId          [ ] Parent A               ║
-  ║  ───────────────────          ┌──[ ] Child A1             ║
-  ║  1   Parent A   null          └──[ ] Child A2             ║
-  ║  2   Child A1   1                  └──[ ] Grandchild A2-1 ║
-  ║  3   Child A2   1               [ ] Parent B              ║
-  ║  6   Grand A2-1 3                 └──[ ] Child B1         ║
-  ║  4   Parent B   null                                       ║
-  ║  5   Child B1   4                (checkboxes reflect       ║
-  ║                                     this tree data)        ║
+  ║  You are building an Admin Panel for a SaaS product.       ║
+  ║  An admin is editing the "Support Agent" role to decide    ║
+  ║  what this role is allowed to do.                          ║
   ║                                                            ║
-  ║  CLICK FLOW (DEBUG)                                       ║
-  ║  ─────────────────                                        ║
-  ║   DOM change event                                        ║
-  ║    └─► toggleNode()                                       ║
-  ║        ├─► setCheckedDown()   (downwards)                 ║
-  ║        ├─► updateAncestors()  (upwards)                   ║
-  ║        └─► renderTree()                                   ║
+  ║  PERMISSIONS (flat):                                       ║
+  ║    Customer Accounts                                       ║
+  ║      ├─ View Customer                                      ║
+  ║      ├─ Edit Customer                                      ║
+  ║      └─ Reset Password                                     ║
+  ║                                                            ║
+  ║    Orders                                                  ║
+  ║      ├─ View Orders                                        ║
+  ║      ├─ Refund Order                                       ║
+  ║      └─ Cancel Order                                       ║
+  ║                                                            ║
+  ║    Reports                                                 ║
+  ║      ├─ View Sales Report                                  ║
+  ║      └─ Export CSV                                         ║
+  ║                                                            ║
+  ║  BEHAVIOUR:                                                ║
+  ║    • If the admin checks "Customer Accounts",              ║
+  ║      all its child permissions are granted.                ║
+  ║    • If all children are checked, the parent auto-checks.  ║
+  ║    • If some children are checked, parent is indeterminate.║
+  ║                                                            ║
+  ║  This is exactly the same logic you use for file trees,    ║
+  ║  module toggles, feature flags, category selection, etc.   ║
   ╚════════════════════════════════════════════════════════════╝
   -->
 
@@ -43,8 +51,14 @@
     }
 
     h1 {
-      margin: 0 0 10px;
+      margin: 0 0 4px;
       font-size: 22px;
+    }
+
+    .subtitle {
+      margin: 0 0 16px;
+      font-size: 13px;
+      color: #555;
     }
 
     .layout {
@@ -235,46 +249,44 @@
   </style>
 </head>
 <body>
-  <h1>Recursive Checkbox Tree Debugger</h1>
+  <h1>Role Permissions Tree Debugger</h1>
+  <p class="subtitle">
+    Real-world example: granting permissions for the <strong>"Support Agent"</strong> role in an admin panel.
+  </p>
 
   <div class="layout">
     <!-- LEFT: diagrams + debugger -->
     <div class="panel">
-      <div class="panel-title">Structure &amp; Flow (Graphical)</div>
+      <div class="panel-title">Scenario &amp; Flow</div>
 
       <div class="diagram">
-DATA (flat list):
+REAL-WORLD PROBLEM: Role Permissions
 
-  id  label            parentId
-  ──────────────────────────────
-  1   "Parent A"       null
-  2   "Child A1"       1
-  3   "Child A2"       1
-  6   "Grandchild A2-1"3
-  4   "Parent B"       null
-  5   "Child B1"       4
+  Role: "Support Agent"
+  What is this role allowed to do?
 
-TREE (after buildTree):
+  Permission groups:
+
+    Customer Accounts
+      ├─ View Customer
+      ├─ Edit Customer
+      └─ Reset Password
+
+    Orders
+      ├─ View Orders
+      ├─ Refund Order
+      └─ Cancel Order
+
+    Reports
+      ├─ View Sales Report
+      └─ Export CSV
+
+TREE MODEL (Composite pattern):
 
   roots = [
-    {
-      id: 1, label: "Parent A",
-      children: [
-        { id: 2, label: "Child A1", children: [] },
-        {
-          id: 3, label: "Child A2",
-          children: [
-            { id: 6, label: "Grandchild A2-1", children: [] }
-          ]
-        }
-      ]
-    },
-    {
-      id: 4, label: "Parent B",
-      children: [
-        { id: 5, label: "Child B1", children: [] }
-      ]
-    }
+    { id: 1, label: "Customer Accounts", children: [...] },
+    { id: 5, label: "Orders",            children: [...] },
+    { id: 9, label: "Reports",           children: [...] }
   ]
 
 CLICK FLOW:
@@ -282,13 +294,13 @@ CLICK FLOW:
   [checkbox click] DOM "change" event
         │
         └─► toggleNode(nodeId, checked)
-              ├─► setCheckedDown(node, checked)   (downwards)
-              ├─► updateAncestors(node)           (upwards)
+              ├─► setCheckedDown(node, checked)   (parent → children)
+              ├─► updateAncestors(node)           (children → parent)
               └─► renderTree(treeRoots)           (redraw)
       </div>
 
       <div class="legend">
-        <span class="badge step1">STEP 1</span> Build nested tree structure from <code>config</code><br />
+        <span class="badge step1">STEP 1</span> Build nested permission tree from flat <code>config</code><br />
         <span class="badge step2">STEP 2</span> Children → Parent auto-select / indeterminate<br />
         <span class="badge step3">STEP 3</span> Parent → Children select / unselect all
       </div>
@@ -300,15 +312,15 @@ CLICK FLOW:
 
     <!-- RIGHT: interactive tree -->
     <div class="panel">
-      <div class="panel-title">Interactive Tree</div>
+      <div class="panel-title">Role Permissions: "Support Agent"</div>
       <div id="tree-container"></div>
 
       <div class="caption">
-        Each click logs:
+        This is what an admin would see in a real app:
         <ul>
-          <li>Which function ran.</li>
-          <li>What data it received.</li>
-          <li>What the tree looked like at that step.</li>
+          <li>Check <strong>Customer Accounts</strong> → all child permissions are granted.</li>
+          <li>Check only <strong>View Orders</strong> → <strong>Orders</strong> group becomes partially selected.</li>
+          <li>Checking all children makes the parent fully checked again.</li>
         </ul>
       </div>
     </div>
@@ -316,20 +328,35 @@ CLICK FLOW:
 
   <script>
     // ──────────────────────────────────────────────────────────
-    // STEP 0: FLAT CONFIG (INPUT)
+    // STEP 0: FLAT CONFIG (REAL-WORLD PERMISSIONS)
     // ──────────────────────────────────────────────────────────
+    // Imagine this coming from the database as "permissions"
+    // that you can assign to a role.
+    //
+    // parentId = null   → top-level permission category
+    // parentId = X      → child of permission with id X
+    //
     const config = [
-      { id: 1, label: "Parent A", parentId: null },
-      { id: 2, label: "Child A1", parentId: 1 },
-      { id: 3, label: "Child A2", parentId: 1 },
-      { id: 6, label: "Grandchild A2-1", parentId: 3 },
+      // Customer Accounts
+      { id: 1, label: "Customer Accounts", parentId: null },
+      { id: 2, label: "View Customer",     parentId: 1 },
+      { id: 3, label: "Edit Customer",     parentId: 1 },
+      { id: 4, label: "Reset Password",    parentId: 1 },
 
-      { id: 4, label: "Parent B", parentId: null },
-      { id: 5, label: "Child B1", parentId: 4 }
+      // Orders
+      { id: 5, label: "Orders",            parentId: null },
+      { id: 6, label: "View Orders",       parentId: 5 },
+      { id: 7, label: "Refund Order",      parentId: 5 },
+      { id: 8, label: "Cancel Order",      parentId: 5 },
+
+      // Reports
+      { id: 9,  label: "Reports",          parentId: null },
+      { id: 10, label: "View Sales Report",parentId: 9 },
+      { id: 11, label: "Export CSV",       parentId: 9 }
     ];
 
     // ──────────────────────────────────────────────────────────
-    // DEBUG UTILITIES (SNAPSHOTS + LOGGING)
+    // DEBUG UTILITIES (SNAPSHOTS + LOGGING IN UI)
     // ──────────────────────────────────────────────────────────
     let debugStep = 1;
     let debugSession = 0;
@@ -360,12 +387,12 @@ CLICK FLOW:
       const sessionHeader = document.createElement("div");
       sessionHeader.className = "debug-session-label";
       sessionHeader.textContent =
-        `Click #${debugSession}: node ${nodeId} ("${label}") → checked = ${newChecked}`;
+        `Click #${debugSession}: "${label}" (id=${nodeId}) → checked = ${newChecked}`;
       log.appendChild(sessionHeader);
     }
 
     function debugLog(title, payload) {
-      if (!debugSession) return;      // only log inside a click session
+      if (!debugSession) return;
 
       const log = document.getElementById("debug-log");
       if (!log) return;
@@ -381,7 +408,6 @@ CLICK FLOW:
       if (payload !== undefined) {
         const pre = document.createElement("pre");
         pre.className = "log-body";
-
         try {
           pre.textContent =
             typeof payload === "string"
@@ -390,7 +416,6 @@ CLICK FLOW:
         } catch (e) {
           pre.textContent = String(payload);
         }
-
         entry.appendChild(pre);
       }
 
@@ -404,7 +429,7 @@ CLICK FLOW:
     function buildTree(items) {
       const lookup = new Map();
 
-      // 1A) Build map id -> node with initial state
+      // Create node objects with checkbox state
       for (const item of items) {
         lookup.set(item.id, {
           ...item,
@@ -416,7 +441,7 @@ CLICK FLOW:
 
       const roots = [];
 
-      // 1B) Connect children to parents
+      // Hook children to parents
       for (const item of items) {
         const node = lookup.get(item.id);
 
@@ -451,7 +476,7 @@ CLICK FLOW:
       return parentMap;
     }
 
-    // Find node by id in the tree
+    // Find node by id in tree
     function findNodeById(roots, id) {
       const stack = [...roots];
 
@@ -484,7 +509,7 @@ CLICK FLOW:
     function updateAncestors(node, parentMap) {
       const parent = parentMap.get(node.id);
       if (!parent) {
-        debugLog("updateAncestors()", "Reached root (no parent) – stop.");
+        debugLog("updateAncestors()", "Reached top-level permission – stop.");
         return;
       }
 
@@ -492,6 +517,7 @@ CLICK FLOW:
 
       debugLog(`updateAncestors(from nodeId=${node.id})`, {
         parentId: parent.id,
+        parentLabel: parent.label,
         childrenBefore: children.map(snapshotNode)
       });
 
@@ -513,7 +539,7 @@ CLICK FLOW:
         parent.indeterminate = true;
       }
 
-      debugLog(`parent ${parent.id} after update`, snapshotNode(parent));
+      debugLog(`parent ${parent.id} ("${parent.label}") after update`, snapshotNode(parent));
 
       updateAncestors(parent, parentMap);
     }
@@ -527,17 +553,18 @@ CLICK FLOW:
 
       debugLog("toggleNode()", {
         nodeId,
+        label: node.label,
         newChecked,
         treeBefore: snapshotTree(roots)
       });
 
-      // Downwards
+      // Parent → children
       setCheckedDown(node, newChecked);
 
-      // Upwards
+      // Children → parent
       updateAncestors(node, parentMap);
 
-      // Redraw
+      // Redraw UI
       renderTree(roots, parentMap);
 
       debugLog("toggleNode() finished", {
@@ -561,7 +588,7 @@ CLICK FLOW:
       checkbox.addEventListener("change", (e) => {
         const newChecked = e.target.checked;
 
-        // Start a new debug session for this click
+        // Start a new debugger session for this click
         startDebugSession(node.id, node.label, newChecked);
         debugLog("DOM change event", {
           nodeId: node.id,
@@ -579,6 +606,7 @@ CLICK FLOW:
       li.appendChild(checkbox);
       li.appendChild(label);
 
+      // Recursively render children
       if (node.children.length > 0) {
         const ul = document.createElement("ul");
         ul.className = "tree-list";
